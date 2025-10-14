@@ -19,29 +19,45 @@ app.post("/approve-payment", async (req, res) => {
     const { paymentId } = req.body;
     if (!paymentId) return res.status(400).json({ error: "Missing paymentId" });
 
-    console.log("🔹 Approving payment:", paymentId);
+    console.log("🔹 APPROVING PAYMENT IMMEDIATELY:", paymentId);
 
-    const { data: payment } = await axios.get(`${PI_API_BASE}/${paymentId}`, {
-      headers: { Authorization: `Key ${PI_API_KEY}` },
-    });
-
-    console.log("Payment status:", payment.status);
-
-    if (["approved", "completed"].includes(payment.status)) {
-      return res.json({ success: true, status: `Already ${payment.status}` });
-    }
-
-    const { data: approved } = await axios.post(
+    // ✅ APPROVE IMMEDIATELY - NO STATUS CHECK FIRST!
+    const { data } = await axios.post(
       `${PI_API_BASE}/${paymentId}/approve`,
-      {},
-      { headers: { Authorization: `Key ${PI_API_KEY}` } }
+      {}, // Empty body
+      { 
+        headers: { 
+          Authorization: `Key ${PI_API_KEY}`,
+          "Content-Type": "application/json"
+        } 
+      }
     );
 
-    console.log("✅ Approved payment:", approved);
-    res.json({ success: true, status: "Payment approved" });
+    console.log("✅ PAYMENT APPROVED SUCCESSFULLY");
+    res.json({ 
+      success: true, 
+      status: "approved",
+      paymentId: paymentId 
+    });
+
   } catch (err) {
     console.error("❌ Approve error:", err.response?.data || err.message);
-    res.status(500).json({ error: "Failed to approve payment" });
+
+    // ✅ If it's already approved, that's OK - return success
+    if (err.response?.status === 400 && 
+        err.response?.data?.message?.includes("already approved")) {
+      console.log("✅ Payment was already approved");
+      return res.json({ 
+        success: true, 
+        status: "already_approved",
+        paymentId: req.body.paymentId 
+      });
+    }
+
+    res.status(500).json({ 
+      error: "Failed to approve payment",
+      details: err.response?.data 
+    });
   }
 });
 
@@ -75,12 +91,15 @@ app.post("/send-pi", async (req, res) => {
     if (!username || !amount)
       return res.status(400).json({ error: "Missing username or amount" });
 
-    console.log(`💸 Sending ${amount} Pi to ${username}`);
+    // ✅ Handle if amount is sent as object or string
+    const finalAmount = typeof amount === 'object' ? (amount.value || amount.amount) : Number(amount);
+    
+    console.log(`💸 Sending ${finalAmount} Pi to ${username}`);
 
     // ✅ CORRECT A2U PAYMENT FORMAT
     const paymentData = {
       payment: {
-        amount: Number(amount), // Ensure it's a number
+        amount: Number(finalAmount), // Ensure it's a number
         memo: memo || "Reward from Orbit",
         metadata: { reason: "App reward" },
       },
