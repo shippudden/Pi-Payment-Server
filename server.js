@@ -2,9 +2,12 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import PiNetwork from "pi-backend";
+import { createRequire } from 'module';
 
 dotenv.config();
+
+const require = createRequire(import.meta.url);
+const PiNetwork = require('pi-backend').default;
 
 const app = express();
 app.use(cors());
