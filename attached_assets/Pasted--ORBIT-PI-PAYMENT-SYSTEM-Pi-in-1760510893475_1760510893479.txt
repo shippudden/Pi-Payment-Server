@@ -1,0 +1,125 @@
+// ==========================
+// 🪙 ORBIT PI PAYMENT SYSTEM
+// ==========================
+
+Pi.init({ version: "2.0" });
+
+const serverBaseUrl = "https://85f7d394-11f9-440d-9ee9-f45b757a9322-00-31t8rw2v9f0th.worf.replit.dev";
+const debugDiv = document.getElementById("debug");
+
+function log(message) {
+  console.log(message);
+  if (debugDiv) debugDiv.textContent += `\n${message}`;
+}
+
+// Incomplete payment handler
+function onIncompletePaymentFound(payment) {
+  log("Found incomplete payment: " + JSON.stringify(payment));
+  fetch(`${serverBaseUrl}/complete-payment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      paymentId: payment.identifier,
+      txid: payment.transaction_id
+    }),
+  });
+}
+
+// 🔐 LOGIN (User Authentication)
+async function loginWithPi() {
+  try {
+    const scopes = ["username", "payments", "wallet_address"];
+    const auth = await Pi.authenticate(scopes, onIncompletePaymentFound);
+    const user = auth.user;
+    // Save both username and uid for server-side payments
+    localStorage.setItem("piUser", JSON.stringify(user));
+
+    log(`✅ Logged in as ${user.username}`);
+    alert(`Welcome ${user.username}!`);
+
+    const loginBtn = document.getElementById("login");
+    if (loginBtn) {
+      loginBtn.title = `@${user.username}`;
+      loginBtn.style.border = "2px solid #6c5ce7";
+    }
+  } catch (error) {
+    log("❌ Login failed: " + error.message);
+  }
+}
+
+// 💸 USER TO APP PAYMENT
+async function payWithPi(amount = 0.001, memo = "Orbit Test Payment") {
+  try {
+    // AUTHENTICATE FIRST with payments scope
+    const scopes = ["username", "payments", "wallet_address"]
+    const auth = await Pi.authenticate(scopes, onIncompletePaymentFound);
+
+    const payment = await Pi.createPayment(
+      { amount, memo, metadata: { purpose: "product-purchase" } },
+      {
+        onReadyForServerApproval: (paymentId) => {
+          log("Approving payment: " + paymentId);
+          fetch(`${serverBaseUrl}/approve-payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paymentId }),
+          });
+        },
+        onReadyForServerCompletion: (paymentId, txid) => {
+          log("Completing payment: " + paymentId);
+          fetch(`${serverBaseUrl}/complete-payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paymentId, txid }),
+          });
+        },
+        onCancel: (paymentId) => log("❌ Payment cancelled: " + paymentId),
+        onError: (error, payment) =>
+          log("⚠ Payment error: " + error + " for " + JSON.stringify(payment)),
+      }
+    );
+
+    log("Payment created: " + JSON.stringify(payment));
+    alert("✅ Payment successful!");
+  } catch (error) {
+    log("❌ Payment failed: " + error.message);
+  }
+}
+
+// 🎁 APP TO USER PAYMENT
+async function sendReward(amount = 0.001, memo = "Thanks for using Orbit!") {
+  const user = JSON.parse(localStorage.getItem("piUser"));
+  if (!user) return alert("Please log in first!");
+
+  try {
+    const res = await fetch(`${serverBaseUrl}/send-pi`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: user.uid, amount, memo }),
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      log("🎁 Reward sent successfully!");
+      alert("🎉 Reward sent successfully!");
+    } else {
+      log("Reward failed: " + data.error);
+      alert("⚠ Reward failed: " + data.error);
+    }
+  } catch (err) {
+    log("Error sending reward: " + err.message);
+  }
+}
+
+// ==========================
+// EVENT LISTENERS
+// ==========================
+document.addEventListener("DOMContentLoaded", () => {
+  const loginBtn = document.getElementById("login");
+  const payBtn = document.getElementById("payBtn");
+  const claimBtn = document.getElementById("claimPi");
+
+  if (loginBtn) loginBtn.addEventListener("click", loginWithPi);
+  if (payBtn) payBtn.addEventListener("click", () => payWithPi(0.001, "Product Test Payment"));
+  if (claimBtn) claimBtn.addEventListener("click", sendReward);
+});
