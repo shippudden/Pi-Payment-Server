@@ -14,7 +14,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 const PI_API_KEY = process.env.PI_API_KEY;
 const PI_API_BASE = "https://api.minepi.com/v2/payments";
 
